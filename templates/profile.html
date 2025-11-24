@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Профиль - Мой Петропавловск</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+</head>
+<body class="bg-gray-50">
+    {{template "header" .}}
+    
+    <main class="container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto">
+            <div class="bg-white rounded-lg shadow-md p-8 mb-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h1 class="text-3xl font-bold text-gray-900">Мой профиль</h1>
+                    {{if .IsAdmin}}
+                    <span class="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-semibold">Администратор</span>
+                    {{else}}
+                    <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">Пользователь</span>
+                    {{end}}
+                </div>
+                
+                <div class="space-y-4">
+                    <div class="border-b pb-4">
+                        <label class="text-sm font-semibold text-gray-600">ID пользователя</label>
+                        <p class="text-lg text-gray-900">#{{.UserID}}</p>
+                    </div>
+                    
+                    <div class="border-b pb-4">
+                        <label class="text-sm font-semibold text-gray-600">Никнейм</label>
+                        <p class="text-lg text-gray-900">{{if .Nickname}}{{.Nickname}}{{else}}Не указан{{end}}</p>
+                    </div>
+                    
+                    <div class="border-b pb-4">
+                        <label class="text-sm font-semibold text-gray-600">Email</label>
+                        <p class="text-lg text-gray-900">{{.Email}}</p>
+                    </div>
+                    
+                    <div class="border-b pb-4">
+                        <label class="text-sm font-semibold text-gray-600">Роль</label>
+                        <p class="text-lg text-gray-900">{{if .IsAdmin}}Администратор{{else}}Житель{{end}}</p>
+                    </div>
+                    
+                    <div>
+                        <label class="text-sm font-semibold text-gray-600">Подано идей</label>
+                        <p class="text-lg text-gray-900">{{.ProjectCount}}</p>
+                    </div>
+                </div>
+            </div>
+            
+            {{if gt .ProjectCount 0}}
+            <div class="bg-white rounded-lg shadow-md p-8">
+                <h2 class="text-2xl font-bold text-gray-900 mb-4">Мои проекты</h2>
+                <div class="space-y-4">
+                    {{range .Projects}}
+                    <div class="border rounded-lg p-4 hover:bg-gray-50 transition">
+                        <div class="flex justify-between items-start">
+                            <div class="flex-1">
+                                <h3 class="text-lg font-semibold text-gray-900 mb-1">{{.Title}}</h3>
+                                <p class="text-gray-600 text-sm mb-2">{{.Category}} • {{.District}}</p>
+                                <p class="text-gray-700 line-clamp-2">{{.Description}}</p>
+                            </div>
+                            <div class="ml-4">
+                                {{if eq .Status "moderation"}}
+                                <span class="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold">На модерации</span>
+                                {{else if eq .Status "voting"}}
+                                <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">Голосование</span>
+                                {{else if eq .Status "selected"}}
+                                <span class="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold">Победитель</span>
+                                {{else if eq .Status "in_progress"}}
+                                <span class="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-semibold">В работе</span>
+                                {{else if eq .Status "done"}}
+                                <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold">Завершён</span>
+                                {{else if eq .Status "rejected"}}
+                                <span class="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-semibold">Отклонён</span>
+                                {{end}}
+                            </div>
+                        </div>
+                        <div class="mt-4 flex justify-between items-center">
+                            <div class="text-sm text-gray-600">
+                                <span class="font-semibold">Бюджет:</span> {{.Budget}} ₸ • 
+                                <span class="font-semibold">Голосов:</span> {{.VoteCount}}
+                            </div>
+                            <a href="/projects/{{.ID}}" class="text-blue-600 hover:text-blue-700 text-sm font-semibold">Подробнее →</a>
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </main>
+</body>
+</html>
+

@@ -51,8 +51,16 @@ func (h *Handler) RegisterPage(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) RegisterSubmit(w http.ResponseWriter, r *http.Request) {
         email := r.FormValue("email")
+        nickname := r.FormValue("nickname")
         password := r.FormValue("password")
         confirmPassword := r.FormValue("confirm_password")
+
+        if nickname == "" {
+                w.Header().Set("HX-Retarget", "#error")
+                w.Header().Set("HX-Reswap", "innerHTML")
+                w.Write([]byte(`<div class="text-red-600 text-sm">Никнейм обязателен</div>`))
+                return
+        }
 
         if password != confirmPassword {
                 w.Header().Set("HX-Retarget", "#error")
@@ -76,7 +84,7 @@ func (h *Handler) RegisterSubmit(w http.ResponseWriter, r *http.Request) {
                 return
         }
 
-        user, err := h.DB.CreateUser(email, hash)
+        user, err := h.DB.CreateUser(email, nickname, hash)
         if err != nil {
                 w.Header().Set("HX-Retarget", "#error")
                 w.Header().Set("HX-Reswap", "innerHTML")
@@ -87,6 +95,7 @@ func (h *Handler) RegisterSubmit(w http.ResponseWriter, r *http.Request) {
         session, _ := h.Store.Get(r, "session")
         session.Values["user_id"] = user.ID
         session.Values["email"] = user.Email
+        session.Values["nickname"] = user.Nickname
         session.Values["role"] = user.Role
         session.Save(r, w)
 
@@ -120,6 +129,7 @@ func (h *Handler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
         session, _ := h.Store.Get(r, "session")
         session.Values["user_id"] = user.ID
         session.Values["email"] = user.Email
+        session.Values["nickname"] = user.Nickname
         session.Values["role"] = user.Role
         session.Save(r, w)
 
@@ -541,4 +551,61 @@ func (h *Handler) AdminEditProject(w http.ResponseWriter, r *http.Request) {
 
         w.Header().Set("HX-Redirect", "/admin")
         w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) ProfilePage(w http.ResponseWriter, r *http.Request) {
+        session, _ := h.Store.Get(r, "session")
+        userID := session.Values["user_id"]
+        userEmail := session.Values["email"]
+        userNickname := session.Values["nickname"]
+        userRole := session.Values["role"]
+
+        if userID == nil {
+                http.Redirect(w, r, "/login", http.StatusSeeOther)
+                return
+        }
+
+        var uid int
+        switch v := userID.(type) {
+        case int:
+                uid = v
+        case int64:
+                uid = int(v)
+        case float64:
+                uid = int(v)
+        default:
+                http.Error(w, "Неверный тип ID пользователя", http.StatusInternalServerError)
+                return
+        }
+
+        user, err := h.DB.GetUserByID(uid)
+        if err != nil {
+                http.Error(w, "Пользователь не найден", http.StatusNotFound)
+                return
+        }
+
+        projects, err := h.DB.GetAllProjects()
+        if err != nil {
+                projects = []models.Project{}
+        }
+
+        userProjects := []models.Project{}
+        for _, p := range projects {
+                if p.UserID == user.ID {
+                        userProjects = append(userProjects, p)
+                }
+        }
+
+        data := map[string]interface{}{
+                "LoggedIn":     true,
+                "IsAdmin":      userRole == "admin",
+                "User":         user,
+                "Email":        userEmail,
+                "Nickname":     userNickname,
+                "UserID":       userID,
+                "ProjectCount": len(userProjects),
+                "Projects":     userProjects,
+        }
+
+        h.Templates.ExecuteTemplate(w, "profile.html", data)
 }

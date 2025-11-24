@@ -66,6 +66,7 @@ func main() {
 
         r.Group(func(r chi.Router) {
                 r.Use(middleware.RequireAuth(store))
+                r.Get("/profile", h.ProfilePage)
                 r.Get("/submit", h.SubmitPage)
                 r.Post("/submit", h.SubmitProject)
                 r.Post("/vote", h.VoteSubmit)

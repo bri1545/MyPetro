@@ -120,19 +120,24 @@ func (db *Database) initSchema() error {
                 return err
         }
 
+        _, err = db.Pool.Exec(ctx, "ALTER TABLE users ADD COLUMN IF NOT EXISTS nickname TEXT")
+        if err != nil {
+                return err
+        }
+
         _, err = db.Pool.Exec(ctx, "UPDATE projects SET status = 'moderation' WHERE status = 'voting' AND id NOT IN (SELECT DISTINCT project_id FROM votes)")
         
         return nil
 }
 
-func (db *Database) CreateUser(email, passwordHash string) (*models.User, error) {
+func (db *Database) CreateUser(email, nickname, passwordHash string) (*models.User, error) {
         ctx := context.Background()
         var user models.User
 
         err := db.Pool.QueryRow(ctx,
-                "INSERT INTO users (email, password_hash, role) VALUES ($1, $2, 'citizen') RETURNING id, email, role, created_at",
-                email, passwordHash,
-        ).Scan(&user.ID, &user.Email, &user.Role, &user.CreatedAt)
+                "INSERT INTO users (email, nickname, password_hash, role) VALUES ($1, $2, $3, 'citizen') RETURNING id, email, nickname, role, created_at",
+                email, nickname, passwordHash,
+        ).Scan(&user.ID, &user.Email, &user.Nickname, &user.Role, &user.CreatedAt)
 
         if err != nil {
                 return nil, err
@@ -141,14 +146,14 @@ func (db *Database) CreateUser(email, passwordHash string) (*models.User, error)
         return &user, nil
 }
 
-func (db *Database) CreateAdmin(email, passwordHash string) (*models.User, error) {
+func (db *Database) CreateAdmin(email, nickname, passwordHash string) (*models.User, error) {
         ctx := context.Background()
         var user models.User
 
         err := db.Pool.QueryRow(ctx,
-                "INSERT INTO users (email, password_hash, role) VALUES ($1, $2, 'admin') RETURNING id, email, role, created_at",
-                email, passwordHash,
-        ).Scan(&user.ID, &user.Email, &user.Role, &user.CreatedAt)
+                "INSERT INTO users (email, nickname, password_hash, role) VALUES ($1, $2, $3, 'admin') RETURNING id, email, nickname, role, created_at",
+                email, nickname, passwordHash,
+        ).Scan(&user.ID, &user.Email, &user.Nickname, &user.Role, &user.CreatedAt)
 
         if err != nil {
                 return nil, err
@@ -160,14 +165,19 @@ func (db *Database) CreateAdmin(email, passwordHash string) (*models.User, error
 func (db *Database) GetUserByEmail(email string) (*models.User, error) {
         ctx := context.Background()
         var user models.User
+        var nickname *string
 
         err := db.Pool.QueryRow(ctx,
-                "SELECT id, email, password_hash, role, created_at FROM users WHERE email = $1",
+                "SELECT id, email, nickname, password_hash, role, created_at FROM users WHERE email = $1",
                 email,
-        ).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.Role, &user.CreatedAt)
+        ).Scan(&user.ID, &user.Email, &nickname, &user.PasswordHash, &user.Role, &user.CreatedAt)
 
         if err != nil {
                 return nil, err
+        }
+
+        if nickname != nil {
+                user.Nickname = *nickname
         }
 
         return &user, nil
@@ -176,14 +186,19 @@ func (db *Database) GetUserByEmail(email string) (*models.User, error) {
 func (db *Database) GetUserByID(id int) (*models.User, error) {
         ctx := context.Background()
         var user models.User
+        var nickname *string
 
         err := db.Pool.QueryRow(ctx,
-                "SELECT id, email, role, created_at FROM users WHERE id = $1",
+                "SELECT id, email, nickname, role, created_at FROM users WHERE id = $1",
                 id,
-        ).Scan(&user.ID, &user.Email, &user.Role, &user.CreatedAt)
+        ).Scan(&user.ID, &user.Email, &nickname, &user.Role, &user.CreatedAt)
 
         if err != nil {
                 return nil, err
+        }
+
+        if nickname != nil {
+                user.Nickname = *nickname
         }
 
         return &user, nil

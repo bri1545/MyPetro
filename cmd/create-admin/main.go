@@ -15,6 +15,7 @@ func main() {
         defer database.Close()
 
         email := "admin@petro.kz"
+        nickname := "Администратор"
         password := "Admin2024!"
 
         hash, err := auth.HashPassword(password)
@@ -22,7 +23,7 @@ func main() {
                 log.Fatalf("Failed to hash password: %v", err)
         }
 
-        admin, err := database.CreateAdmin(email, hash)
+        admin, err := database.CreateAdmin(email, nickname, hash)
         if err != nil {
                 log.Fatalf("Failed to create admin: %v", err)
         }
@@ -30,6 +31,7 @@ func main() {
         fmt.Println("✅ Администратор создан успешно!")
         fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         fmt.Printf("📧 Email:    %s\n", email)
+        fmt.Printf("👤 Никнейм:  %s\n", nickname)
         fmt.Printf("🔑 Пароль:   %s\n", password)
         fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         fmt.Printf("ID: %d, Роль: %s\n", admin.ID, admin.Role)
