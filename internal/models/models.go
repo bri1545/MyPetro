@@ -11,21 +11,22 @@ type User struct {
 }
 
 type Project struct {
-        ID          int       `json:"id"`
-        Title       string    `json:"title"`
-        Description string    `json:"description"`
-        Category    string    `json:"category"`
-        District    string    `json:"district"`
-        Budget      int       `json:"budget"`
-        Lat         float64   `json:"lat"`
-        Lng         float64   `json:"lng"`
-        Images      []string  `json:"images"`
-        Status      string    `json:"status"`
+        ID          int        `json:"id"`
+        Title       string     `json:"title"`
+        Description string     `json:"description"`
+        Category    string     `json:"category"`
+        District    string     `json:"district"`
+        Budget      int        `json:"budget"`
+        Lat         float64    `json:"lat"`
+        Lng         float64    `json:"lng"`
+        Images      []string   `json:"images"`
+        Status      string     `json:"status"`
+        AIAnalysis  string     `json:"ai_analysis,omitempty"`
         VoteStart   *time.Time `json:"vote_start,omitempty"`
         VoteEnd     *time.Time `json:"vote_end,omitempty"`
-        UserID      int       `json:"user_id"`
-        CreatedAt   time.Time `json:"created_at"`
-        VoteCount   int       `json:"vote_count"`
+        UserID      int        `json:"user_id"`
+        CreatedAt   time.Time  `json:"created_at"`
+        VoteCount   int        `json:"vote_count"`
 }
 
 type Vote struct {

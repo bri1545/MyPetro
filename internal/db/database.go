@@ -56,6 +56,7 @@ func (db *Database) initSchema() error {
                 lng FLOAT NOT NULL,
                 images JSONB DEFAULT '[]',
                 status TEXT DEFAULT 'moderation',
+                ai_analysis TEXT,
                 vote_start TIMESTAMP,
                 vote_end TIMESTAMP,
                 user_id INT REFERENCES users(id) ON DELETE CASCADE,
@@ -110,6 +111,11 @@ func (db *Database) initSchema() error {
         }
 
         _, err = db.Pool.Exec(ctx, "ALTER TABLE projects ADD COLUMN IF NOT EXISTS vote_end TIMESTAMP")
+        if err != nil {
+                return err
+        }
+
+        _, err = db.Pool.Exec(ctx, "ALTER TABLE projects ADD COLUMN IF NOT EXISTS ai_analysis TEXT")
         if err != nil {
                 return err
         }
@@ -192,9 +198,9 @@ func (db *Database) CreateProject(p *models.Project) error {
         }
 
         return db.Pool.QueryRow(ctx,
-                `INSERT INTO projects (title, description, category, district, budget, lat, lng, images, status, user_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, created_at`,
-                p.Title, p.Description, p.Category, p.District, p.Budget, p.Lat, p.Lng, imagesJSON, p.Status, p.UserID,
+                `INSERT INTO projects (title, description, category, district, budget, lat, lng, images, status, ai_analysis, user_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, created_at`,
+                p.Title, p.Description, p.Category, p.District, p.Budget, p.Lat, p.Lng, imagesJSON, p.Status, p.AIAnalysis, p.UserID,
         ).Scan(&p.ID, &p.CreatedAt)
 }
 
@@ -202,7 +208,7 @@ func (db *Database) GetAllProjects() ([]models.Project, error) {
         ctx := context.Background()
         rows, err := db.Pool.Query(ctx,
                 `SELECT p.id, p.title, p.description, p.category, p.district, p.budget, 
-                        p.lat, p.lng, p.images, p.status, p.user_id, p.created_at,
+                        p.lat, p.lng, p.images, p.status, p.ai_analysis, p.user_id, p.created_at,
                         COUNT(v.id) as vote_count
                  FROM projects p
                  LEFT JOIN votes v ON p.id = v.project_id
@@ -218,15 +224,20 @@ func (db *Database) GetAllProjects() ([]models.Project, error) {
         for rows.Next() {
                 var p models.Project
                 var imagesJSON []byte
+                var aiAnalysis *string
 
                 err := rows.Scan(&p.ID, &p.Title, &p.Description, &p.Category, &p.District,
-                        &p.Budget, &p.Lat, &p.Lng, &imagesJSON, &p.Status, &p.UserID, &p.CreatedAt, &p.VoteCount)
+                        &p.Budget, &p.Lat, &p.Lng, &imagesJSON, &p.Status, &aiAnalysis, &p.UserID, &p.CreatedAt, &p.VoteCount)
                 if err != nil {
                         return nil, err
                 }
 
                 if err := json.Unmarshal(imagesJSON, &p.Images); err != nil {
                         p.Images = []string{}
+                }
+
+                if aiAnalysis != nil {
+                        p.AIAnalysis = *aiAnalysis
                 }
 
                 projects = append(projects, p)
@@ -239,10 +250,11 @@ func (db *Database) GetProjectByID(id int) (*models.Project, error) {
         ctx := context.Background()
         var p models.Project
         var imagesJSON []byte
+        var aiAnalysis *string
 
         err := db.Pool.QueryRow(ctx,
                 `SELECT p.id, p.title, p.description, p.category, p.district, p.budget,
-                        p.lat, p.lng, p.images, p.status, p.user_id, p.created_at,
+                        p.lat, p.lng, p.images, p.status, p.ai_analysis, p.user_id, p.created_at,
                         COUNT(v.id) as vote_count
                  FROM projects p
                  LEFT JOIN votes v ON p.id = v.project_id
@@ -250,7 +262,7 @@ func (db *Database) GetProjectByID(id int) (*models.Project, error) {
                  GROUP BY p.id`,
                 id,
         ).Scan(&p.ID, &p.Title, &p.Description, &p.Category, &p.District,
-                &p.Budget, &p.Lat, &p.Lng, &imagesJSON, &p.Status, &p.UserID, &p.CreatedAt, &p.VoteCount)
+                &p.Budget, &p.Lat, &p.Lng, &imagesJSON, &p.Status, &aiAnalysis, &p.UserID, &p.CreatedAt, &p.VoteCount)
 
         if err != nil {
                 return nil, err
@@ -258,6 +270,10 @@ func (db *Database) GetProjectByID(id int) (*models.Project, error) {
 
         if err := json.Unmarshal(imagesJSON, &p.Images); err != nil {
                 p.Images = []string{}
+        }
+
+        if aiAnalysis != nil {
+                p.AIAnalysis = *aiAnalysis
         }
 
         return &p, nil
@@ -413,7 +429,7 @@ func (db *Database) GetProjectsByStatus(status string) ([]models.Project, error)
         ctx := context.Background()
         rows, err := db.Pool.Query(ctx,
                 `SELECT p.id, p.title, p.description, p.category, p.district, p.budget, 
-                        p.lat, p.lng, p.images, p.status, p.user_id, p.created_at,
+                        p.lat, p.lng, p.images, p.status, p.ai_analysis, p.user_id, p.created_at,
                         COUNT(v.id) as vote_count
                  FROM projects p
                  LEFT JOIN votes v ON p.id = v.project_id
@@ -431,9 +447,10 @@ func (db *Database) GetProjectsByStatus(status string) ([]models.Project, error)
         for rows.Next() {
                 var p models.Project
                 var imagesJSON []byte
+                var aiAnalysis *string
 
                 err := rows.Scan(&p.ID, &p.Title, &p.Description, &p.Category, &p.District,
-                        &p.Budget, &p.Lat, &p.Lng, &imagesJSON, &p.Status, &p.UserID, &p.CreatedAt, &p.VoteCount)
+                        &p.Budget, &p.Lat, &p.Lng, &imagesJSON, &p.Status, &aiAnalysis, &p.UserID, &p.CreatedAt, &p.VoteCount)
                 if err != nil {
                         return nil, err
                 }
@@ -442,10 +459,25 @@ func (db *Database) GetProjectsByStatus(status string) ([]models.Project, error)
                         p.Images = []string{}
                 }
 
+                if aiAnalysis != nil {
+                        p.AIAnalysis = *aiAnalysis
+                }
+
                 projects = append(projects, p)
         }
 
         return projects, nil
+}
+
+func (db *Database) UpdateProject(projectID int, title, description, category, district string, budget int) error {
+        ctx := context.Background()
+
+        _, err := db.Pool.Exec(ctx,
+                "UPDATE projects SET title = $1, description = $2, category = $3, district = $4, budget = $5 WHERE id = $6",
+                title, description, category, district, budget, projectID,
+        )
+
+        return err
 }
 
 func (db *Database) Close() {

@@ -183,12 +183,14 @@ func (h *Handler) SubmitProject(w http.ResponseWriter, r *http.Request) {
                 Lng:         lng,
         }
 
-        result := ai.ValidateIdeaWithGemini(submission)
-        if !result.Approved {
-                w.Header().Set("HX-Retarget", "#error")
-                w.Header().Set("HX-Reswap", "innerHTML")
-                w.Write([]byte(fmt.Sprintf(`<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded"><strong>Проект отклонён ИИ:</strong> %s</div>`, result.Reason)))
-                return
+        analysis := ai.AnalyzeIdeaWithGemini(submission)
+        
+        analysisJSON, err := json.Marshal(map[string]interface{}{
+                "pros": analysis.Pros,
+                "cons": analysis.Cons,
+        })
+        if err != nil {
+                analysisJSON = []byte("{}")
         }
 
         project := &models.Project{
@@ -200,11 +202,12 @@ func (h *Handler) SubmitProject(w http.ResponseWriter, r *http.Request) {
                 Lat:         lat,
                 Lng:         lng,
                 Status:      "moderation",
+                AIAnalysis:  string(analysisJSON),
                 UserID:      userID.(int),
                 Images:      []string{},
         }
 
-        err := h.DB.CreateProject(project)
+        err = h.DB.CreateProject(project)
         if err != nil {
                 w.Header().Set("HX-Retarget", "#error")
                 w.Header().Set("HX-Reswap", "innerHTML")
@@ -495,5 +498,47 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
         }
 
         w.Header().Set("HX-Refresh", "true")
+        w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) AdminEditProject(w http.ResponseWriter, r *http.Request) {
+        session, _ := h.Store.Get(r, "session")
+        userRole := session.Values["role"]
+        if userRole != "admin" {
+                http.Error(w, "Forbidden", http.StatusForbidden)
+                return
+        }
+
+        projectIDStr := r.FormValue("project_id")
+        projectID, _ := strconv.Atoi(projectIDStr)
+        title := strings.TrimSpace(r.FormValue("title"))
+        description := strings.TrimSpace(r.FormValue("description"))
+        category := r.FormValue("category")
+        district := strings.TrimSpace(r.FormValue("district"))
+        budgetStr := r.FormValue("budget")
+        budget, err := strconv.Atoi(budgetStr)
+        if err != nil || budget <= 0 {
+                w.Header().Set("HX-Retarget", "#error")
+                w.Header().Set("HX-Reswap", "innerHTML")
+                w.Write([]byte(`<div class="text-red-600 text-sm">Некорректный бюджет</div>`))
+                return
+        }
+
+        if title == "" || description == "" || district == "" {
+                w.Header().Set("HX-Retarget", "#error")
+                w.Header().Set("HX-Reswap", "innerHTML")
+                w.Write([]byte(`<div class="text-red-600 text-sm">Все поля обязательны для заполнения</div>`))
+                return
+        }
+
+        err = h.DB.UpdateProject(projectID, title, description, category, district, budget)
+        if err != nil {
+                w.Header().Set("HX-Retarget", "#error")
+                w.Header().Set("HX-Reswap", "innerHTML")
+                w.Write([]byte(`<div class="text-red-600 text-sm">Ошибка обновления проекта</div>`))
+                return
+        }
+
+        w.Header().Set("HX-Redirect", "/admin")
         w.WriteHeader(http.StatusOK)
 }

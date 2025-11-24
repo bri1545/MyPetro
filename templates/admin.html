@@ -28,6 +28,45 @@
                                 <div><strong>Голосов:</strong> {{.VoteCount}}</div>
                             </div>
                             
+                            {{if .AIAnalysis}}
+                            <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                <h4 class="font-semibold text-blue-900 mb-2">🤖 Анализ ИИ-советника:</h4>
+                                <div id="ai-analysis-{{.ID}}" data-analysis="{{.AIAnalysis}}"></div>
+                                <script>
+                                    (function() {
+                                        try {
+                                            const element = document.getElementById('ai-analysis-{{.ID}}');
+                                            const analysisData = element.getAttribute('data-analysis');
+                                            const analysis = JSON.parse(analysisData);
+                                            let html = '';
+                                            
+                                            if (analysis.pros && analysis.pros.length > 0) {
+                                                html += '<div class="mb-3"><strong class="text-green-700">✓ Плюсы:</strong><ul class="list-disc ml-5 mt-1">';
+                                                analysis.pros.forEach(pro => {
+                                                    const escapedPro = pro.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                                                    html += '<li class="text-sm text-gray-700">' + escapedPro + '</li>';
+                                                });
+                                                html += '</ul></div>';
+                                            }
+                                            
+                                            if (analysis.cons && analysis.cons.length > 0) {
+                                                html += '<div><strong class="text-red-700">✗ Минусы:</strong><ul class="list-disc ml-5 mt-1">';
+                                                analysis.cons.forEach(con => {
+                                                    const escapedCon = con.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                                                    html += '<li class="text-sm text-gray-700">' + escapedCon + '</li>';
+                                                });
+                                                html += '</ul></div>';
+                                            }
+                                            
+                                            element.innerHTML = html;
+                                        } catch(e) {
+                                            document.getElementById('ai-analysis-{{.ID}}').innerHTML = '<p class="text-sm text-gray-500">Анализ недоступен</p>';
+                                        }
+                                    })();
+                                </script>
+                            </div>
+                            {{end}}
+                            
                             <form hx-post="/admin/update-status" hx-swap="none" class="space-y-4">
                                 <input type="hidden" name="project_id" value="{{.ID}}">
                                 <div>
@@ -55,10 +94,53 @@
                                     <textarea name="comment" rows="3" class="w-full px-4 py-2 border rounded-lg" placeholder="Комментарий для автора"></textarea>
                                 </div>
                                 
-                                <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">
-                                    Обновить статус
-                                </button>
+                                <div class="flex gap-4">
+                                    <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">
+                                        Обновить статус
+                                    </button>
+                                    <button type="button" onclick="toggleEdit({{.ID}})" class="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700">
+                                        Редактировать проект
+                                    </button>
+                                </div>
                             </form>
+                            
+                            <div id="edit-form-{{.ID}}" class="hidden mt-4 p-4 bg-gray-50 rounded-lg">
+                                <h4 class="font-semibold mb-4">Редактировать детали проекта:</h4>
+                                <form hx-post="/admin/edit-project" hx-swap="none" class="space-y-4">
+                                    <input type="hidden" name="project_id" value="{{.ID}}">
+                                    <div>
+                                        <label class="block text-sm font-medium mb-2">Название:</label>
+                                        <input type="text" name="title" value="{{.Title}}" class="w-full px-4 py-2 border rounded-lg" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium mb-2">Описание:</label>
+                                        <textarea name="description" rows="4" class="w-full px-4 py-2 border rounded-lg" required>{{.Description}}</textarea>
+                                    </div>
+                                    <div class="grid md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-medium mb-2">Категория:</label>
+                                            <select name="category" class="w-full px-4 py-2 border rounded-lg" required>
+                                                <option value="Озеленение" {{if eq .Category "Озеленение"}}selected{{end}}>Озеленение</option>
+                                                <option value="Благоустройство" {{if eq .Category "Благоустройство"}}selected{{end}}>Благоустройство</option>
+                                                <option value="Скверы" {{if eq .Category "Скверы"}}selected{{end}}>Скверы</option>
+                                                <option value="Культура" {{if eq .Category "Культура"}}selected{{end}}>Культура</option>
+                                                <option value="Урбанистика" {{if eq .Category "Урбанистика"}}selected{{end}}>Урбанистика</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium mb-2">Район:</label>
+                                            <input type="text" name="district" value="{{.District}}" class="w-full px-4 py-2 border rounded-lg" required>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium mb-2">Бюджет (₸):</label>
+                                        <input type="number" name="budget" value="{{.Budget}}" min="1" class="w-full px-4 py-2 border rounded-lg" required>
+                                    </div>
+                                    <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">
+                                        Сохранить изменения
+                                    </button>
+                                </form>
+                            </div>
                         </div>
                     {{end}}
                 </div>
@@ -177,6 +259,11 @@
             } else {
                 datesDiv.classList.add('hidden');
             }
+        }
+        
+        function toggleEdit(projectId) {
+            const editForm = document.getElementById('edit-form-' + projectId);
+            editForm.classList.toggle('hidden');
         }
     </script>
 </body>

@@ -31,23 +31,23 @@ type GeminiCandidate struct {
         Content GeminiContent `json:"content"`
 }
 
-type ModerationResult struct {
-        Approved bool
-        Reason   string
+type AIAnalysis struct {
+        Pros []string
+        Cons []string
 }
 
-func ValidateIdeaWithGemini(p models.ProjectSubmission) ModerationResult {
+func AnalyzeIdeaWithGemini(p models.ProjectSubmission) AIAnalysis {
         apiKey := os.Getenv("GEMINI_API_KEY")
         if apiKey == "" {
-                return ModerationResult{
-                        Approved: false,
-                        Reason:   "Ошибка конфигурации системы модерации",
+                return AIAnalysis{
+                        Pros: []string{},
+                        Cons: []string{"Ошибка конфигурации системы модерации"},
                 }
         }
 
         prompt := fmt.Sprintf(`Ты эксперт по партисипаторному бюджетированию для города Петропавловск, Казахстан.
 
-Оцени эту идею проекта и реши: ОДОБРИТЬ или ОТКЛОНИТЬ.
+Проанализируй эту идею проекта и составь список плюсов и минусов для помощи администраторам в принятии решения.
 
 НАЗВАНИЕ: %s
 ОПИСАНИЕ: %s
@@ -56,28 +56,28 @@ func ValidateIdeaWithGemini(p models.ProjectSubmission) ModerationResult {
 БЮДЖЕТ: %d ₸
 КООРДИНАТЫ: lat=%f, lng=%f
 
-КРИТЕРИИ ОТКЛОНЕНИЯ:
-1. Бюджет меньше 300 000 ₸ или больше 2 000 000 ₸
-2. Описание короче 500 символов
-3. Координаты отсутствуют (0,0)
-4. Содержит ненормативную лексику или токсичность
-5. Проект для личного использования (мебель в школе, техника в офис, ремонт кабинета)
-6. Нет общественной пользы (проект не улучшает городскую среду для жителей)
-7. Отсутствует описание конкретной проблемы и решения
-8. Проект не соответствует категории (озеленение, благоустройство, скверы, культура, урбанистика)
+ПЛЮСЫ - что хорошо в проекте:
+- Есть ли общественная польза?
+- Улучшает ли городскую среду?
+- Соответствует ли категории партисипаторного бюджетирования?
+- Четко ли описана проблема и решение?
+- Реалистичен ли бюджет?
 
-КРИТЕРИИ ОДОБРЕНИЯ:
-- Проект имеет общественную пользу
-- Направлен на улучшение городской среды
-- Адекватный бюджет в пределах 300k-2M ₸
-- Четко описана проблема и предлагаемое решение
-- Подходит под одну из категорий городского развития
+МИНУСЫ - что может быть проблемой:
+- Проблемы с бюджетом (слишком мало или много, не в пределах 300k-2M ₸)
+- Проблемы с описанием (короткое, неясное)
+- Отсутствие координат или общественной пользы
+- Личное использование вместо общественного блага
+- Токсичность или несоответствие категориям
+- Любые другие проблемы
 
 Ответь СТРОГО в формате JSON:
 {
-  "approved": true/false,
-  "reason": "краткое объяснение на русском языке (одно предложение)"
-}`, p.Title, p.Description, p.Category, p.District, p.Budget, p.Lat, p.Lng)
+  "pros": ["плюс 1", "плюс 2", ...],
+  "cons": ["минус 1", "минус 2", ...]
+}
+
+Каждый пункт должен быть кратким (одно предложение). Если плюсов или минусов нет - верни пустой массив.`, p.Title, p.Description, p.Category, p.District, p.Budget, p.Lat, p.Lng)
 
         reqBody := GeminiRequest{
                 Contents: []GeminiContent{
@@ -91,42 +91,42 @@ func ValidateIdeaWithGemini(p models.ProjectSubmission) ModerationResult {
 
         jsonData, err := json.Marshal(reqBody)
         if err != nil {
-                return ModerationResult{
-                        Approved: false,
-                        Reason:   "Ошибка обработки запроса",
+                return AIAnalysis{
+                        Pros: []string{},
+                        Cons: []string{"Ошибка обработки запроса"},
                 }
         }
 
         url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=%s", apiKey)
         resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
         if err != nil {
-                return ModerationResult{
-                        Approved: false,
-                        Reason:   "Ошибка связи с системой модерации",
+                return AIAnalysis{
+                        Pros: []string{},
+                        Cons: []string{"Ошибка связи с системой модерации"},
                 }
         }
         defer resp.Body.Close()
 
         body, err := io.ReadAll(resp.Body)
         if err != nil {
-                return ModerationResult{
-                        Approved: false,
-                        Reason:   "Ошибка чтения ответа системы",
+                return AIAnalysis{
+                        Pros: []string{},
+                        Cons: []string{"Ошибка чтения ответа системы"},
                 }
         }
 
         var geminiResp GeminiResponse
         if err := json.Unmarshal(body, &geminiResp); err != nil {
-                return ModerationResult{
-                        Approved: false,
-                        Reason:   "Ошибка обработки ответа системы",
+                return AIAnalysis{
+                        Pros: []string{},
+                        Cons: []string{"Ошибка обработки ответа системы"},
                 }
         }
 
         if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
-                return ModerationResult{
-                        Approved: false,
-                        Reason:   "Не удалось получить оценку проекта",
+                return AIAnalysis{
+                        Pros: []string{},
+                        Cons: []string{"Не удалось получить анализ проекта"},
                 }
         }
 
@@ -137,20 +137,20 @@ func ValidateIdeaWithGemini(p models.ProjectSubmission) ModerationResult {
         aiResponse = strings.TrimSpace(aiResponse)
 
         var result struct {
-                Approved bool   `json:"approved"`
-                Reason   string `json:"reason"`
+                Pros []string `json:"pros"`
+                Cons []string `json:"cons"`
         }
 
         if err := json.Unmarshal([]byte(aiResponse), &result); err != nil {
-                return ModerationResult{
-                        Approved: false,
-                        Reason:   "Ошибка интерпретации ответа AI",
+                return AIAnalysis{
+                        Pros: []string{},
+                        Cons: []string{"Ошибка интерпретации ответа AI"},
                 }
         }
 
-        return ModerationResult{
-                Approved: result.Approved,
-                Reason:   result.Reason,
+        return AIAnalysis{
+                Pros: result.Pros,
+                Cons: result.Cons,
         }
 }
 

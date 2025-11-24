@@ -76,6 +76,7 @@ func main() {
                 r.Use(middleware.RequireAdmin(store))
                 r.Get("/admin", h.AdminDashboard)
                 r.Post("/admin/update-status", h.AdminUpdateProjectStatus)
+                r.Post("/admin/edit-project", h.AdminEditProject)
         })
 
         log.Println("Server starting on http://0.0.0.0:5000")
