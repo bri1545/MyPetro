@@ -65,3 +65,26 @@ type ProjectStatusHistory struct {
         AdminID   int       `json:"admin_id"`
         CreatedAt time.Time `json:"created_at"`
 }
+
+type Achievement struct {
+        ID          string `json:"id"`
+        Title       string `json:"title"`
+        Description string `json:"description"`
+        Icon        string `json:"icon"`
+        Requirement int    `json:"requirement"`
+}
+
+type UserAchievement struct {
+        UserID       int       `json:"user_id"`
+        AchievementID string    `json:"achievement_id"`
+        UnlockedAt   time.Time `json:"unlocked_at"`
+}
+
+type UserStats struct {
+        VotesCount            int    `json:"votes_count"`
+        ProjectsCount         int    `json:"projects_count"`
+        ApprovedProjectsCount int    `json:"approved_projects_count"`
+        WinningProjectsCount  int    `json:"winning_projects_count"`
+        CommentsCount         int    `json:"comments_count"`
+        Title                 string `json:"title"`
+}

@@ -89,10 +89,18 @@ func (db *Database) initSchema() error {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS user_achievements (
+                user_id INT REFERENCES users(id) ON DELETE CASCADE,
+                achievement_id TEXT NOT NULL,
+                unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, achievement_id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
         CREATE INDEX IF NOT EXISTS idx_votes_project ON votes(project_id);
         CREATE INDEX IF NOT EXISTS idx_comments_project ON comments(project_id);
         CREATE INDEX IF NOT EXISTS idx_status_history_project ON project_status_history(project_id);
+        CREATE INDEX IF NOT EXISTS idx_user_achievements_user ON user_achievements(user_id);
         `
 
         _, err := db.Pool.Exec(ctx, schema)
@@ -493,6 +501,145 @@ func (db *Database) UpdateProject(projectID int, title, description, category, d
         )
 
         return err
+}
+
+func (db *Database) GetUserStats(userID int) (*models.UserStats, error) {
+        ctx := context.Background()
+        stats := &models.UserStats{}
+
+        err := db.Pool.QueryRow(ctx,
+                "SELECT COUNT(*) FROM votes WHERE user_id = $1",
+                userID,
+        ).Scan(&stats.VotesCount)
+        if err != nil {
+                return nil, err
+        }
+
+        err = db.Pool.QueryRow(ctx,
+                "SELECT COUNT(*) FROM projects WHERE user_id = $1",
+                userID,
+        ).Scan(&stats.ProjectsCount)
+        if err != nil {
+                return nil, err
+        }
+
+        err = db.Pool.QueryRow(ctx,
+                "SELECT COUNT(*) FROM projects WHERE user_id = $1 AND status IN ('voting', 'selected', 'in_progress', 'done')",
+                userID,
+        ).Scan(&stats.ApprovedProjectsCount)
+        if err != nil {
+                return nil, err
+        }
+
+        err = db.Pool.QueryRow(ctx,
+                "SELECT COUNT(*) FROM projects WHERE user_id = $1 AND status = 'selected'",
+                userID,
+        ).Scan(&stats.WinningProjectsCount)
+        if err != nil {
+                return nil, err
+        }
+
+        err = db.Pool.QueryRow(ctx,
+                "SELECT COUNT(*) FROM comments WHERE user_id = $1",
+                userID,
+        ).Scan(&stats.CommentsCount)
+        if err != nil {
+                return nil, err
+        }
+
+        stats.Title = db.CalculateTitle(stats)
+
+        return stats, nil
+}
+
+func (db *Database) CalculateTitle(stats *models.UserStats) string {
+        if stats.WinningProjectsCount > 0 {
+                return "Архитектор города"
+        }
+        if stats.ApprovedProjectsCount >= 5 {
+                return "Эксперт городского развития"
+        }
+        if stats.VotesCount >= 10 {
+                return "Лидер мнений"
+        }
+        if stats.ApprovedProjectsCount >= 3 {
+                return "Идейный вдохновитель"
+        }
+        if stats.VotesCount >= 5 {
+                return "Активный житель"
+        }
+        return "Новичок"
+}
+
+func (db *Database) UnlockAchievement(userID int, achievementID string) error {
+        ctx := context.Background()
+
+        _, err := db.Pool.Exec(ctx,
+                "INSERT INTO user_achievements (user_id, achievement_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                userID, achievementID,
+        )
+
+        return err
+}
+
+func (db *Database) GetUserAchievements(userID int) ([]models.UserAchievement, error) {
+        ctx := context.Background()
+        rows, err := db.Pool.Query(ctx,
+                "SELECT user_id, achievement_id, unlocked_at FROM user_achievements WHERE user_id = $1 ORDER BY unlocked_at DESC",
+                userID,
+        )
+        if err != nil {
+                return nil, err
+        }
+        defer rows.Close()
+
+        var achievements []models.UserAchievement
+        for rows.Next() {
+                var a models.UserAchievement
+                if err := rows.Scan(&a.UserID, &a.AchievementID, &a.UnlockedAt); err != nil {
+                        return nil, err
+                }
+                achievements = append(achievements, a)
+        }
+
+        return achievements, nil
+}
+
+func (db *Database) CheckAndUnlockAchievements(userID int) error {
+        stats, err := db.GetUserStats(userID)
+        if err != nil {
+                return err
+        }
+
+        if stats.ProjectsCount >= 1 {
+                db.UnlockAchievement(userID, "first_project")
+        }
+        if stats.VotesCount >= 5 {
+                db.UnlockAchievement(userID, "voter")
+        }
+        if stats.VotesCount >= 10 {
+                db.UnlockAchievement(userID, "active_citizen")
+        }
+        if stats.VotesCount >= 25 {
+                db.UnlockAchievement(userID, "opinion_leader")
+        }
+        if stats.ApprovedProjectsCount >= 3 {
+                db.UnlockAchievement(userID, "idea_inspirer")
+        }
+        if stats.ApprovedProjectsCount >= 5 {
+                db.UnlockAchievement(userID, "expert")
+        }
+        if stats.WinningProjectsCount >= 1 {
+                db.UnlockAchievement(userID, "city_architect")
+        }
+        if stats.CommentsCount >= 10 {
+                db.UnlockAchievement(userID, "commentator")
+        }
+        if stats.CommentsCount >= 25 {
+                db.UnlockAchievement(userID, "discussant")
+        }
+
+        return nil
 }
 
 func (db *Database) Close() {

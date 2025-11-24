@@ -15,11 +15,16 @@
         <div class="max-w-4xl mx-auto">
             <div class="bg-white rounded-lg shadow-md p-8 mb-6">
                 <div class="flex items-center justify-between mb-6">
-                    <h1 class="text-3xl font-bold text-gray-900">Мой профиль</h1>
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900">Мой профиль</h1>
+                        {{if .Stats}}
+                        <p class="text-lg text-purple-600 font-semibold mt-1">🏆 {{.Stats.Title}}</p>
+                        {{end}}
+                    </div>
                     {{if .IsAdmin}}
                     <span class="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-semibold">Администратор</span>
                     {{else}}
-                    <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">Пользователь</span>
+                    <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">Житель</span>
                     {{end}}
                 </div>
                 
@@ -44,12 +49,66 @@
                         <p class="text-lg text-gray-900">{{if .IsAdmin}}Администратор{{else}}Житель{{end}}</p>
                     </div>
                     
-                    <div>
-                        <label class="text-sm font-semibold text-gray-600">Подано идей</label>
-                        <p class="text-lg text-gray-900">{{.ProjectCount}}</p>
+                </div>
+            </div>
+
+            {{if .Stats}}
+            <div class="bg-white rounded-lg shadow-md p-8 mb-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">📊 Моя статистика</h2>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div class="bg-blue-50 rounded-lg p-4 text-center">
+                        <div class="text-3xl font-bold text-blue-600">{{.Stats.VotesCount}}</div>
+                        <div class="text-sm text-gray-600 mt-1">Голосов отдано</div>
+                    </div>
+                    <div class="bg-green-50 rounded-lg p-4 text-center">
+                        <div class="text-3xl font-bold text-green-600">{{.Stats.ProjectsCount}}</div>
+                        <div class="text-sm text-gray-600 mt-1">Идей подано</div>
+                    </div>
+                    <div class="bg-purple-50 rounded-lg p-4 text-center">
+                        <div class="text-3xl font-bold text-purple-600">{{.Stats.ApprovedProjectsCount}}</div>
+                        <div class="text-sm text-gray-600 mt-1">Идей одобрено</div>
+                    </div>
+                    <div class="bg-yellow-50 rounded-lg p-4 text-center">
+                        <div class="text-3xl font-bold text-yellow-600">{{.Stats.WinningProjectsCount}}</div>
+                        <div class="text-sm text-gray-600 mt-1">Побед</div>
+                    </div>
+                    <div class="bg-indigo-50 rounded-lg p-4 text-center">
+                        <div class="text-3xl font-bold text-indigo-600">{{.Stats.CommentsCount}}</div>
+                        <div class="text-sm text-gray-600 mt-1">Комментариев</div>
                     </div>
                 </div>
             </div>
+            {{end}}
+
+            {{if .Achievements}}
+            <div class="bg-white rounded-lg shadow-md p-8 mb-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">🏅 Достижения</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {{range .Achievements}}
+                    {{$achievement := .Achievement}}
+                    {{$unlocked := .Unlocked}}
+                    <div class="border rounded-lg p-4 {{if $unlocked}}bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-300{{else}}bg-gray-50 border-gray-200 opacity-60{{end}}">
+                        <div class="flex items-start">
+                            <div class="text-4xl mr-4 {{if not $unlocked}}grayscale{{end}}">{{$achievement.Icon}}</div>
+                            <div class="flex-1">
+                                <h3 class="font-bold text-gray-900 mb-1">{{$achievement.Title}}</h3>
+                                <p class="text-sm text-gray-600">{{$achievement.Description}}</p>
+                                {{if $unlocked}}
+                                <div class="mt-2">
+                                    <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-semibold">✓ Получено</span>
+                                </div>
+                                {{else}}
+                                <div class="mt-2">
+                                    <span class="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full">🔒 Заблокировано</span>
+                                </div>
+                                {{end}}
+                            </div>
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
             
             {{if gt .ProjectCount 0}}
             <div class="bg-white rounded-lg shadow-md p-8">

@@ -5,6 +5,7 @@ import (
         "fmt"
         "html/template"
         "net/http"
+        "petropavlovsk-budget/internal/achievements"
         "petropavlovsk-budget/internal/ai"
         "petropavlovsk-budget/internal/auth"
         "petropavlovsk-budget/internal/db"
@@ -98,6 +99,8 @@ func (h *Handler) RegisterSubmit(w http.ResponseWriter, r *http.Request) {
         session.Values["nickname"] = user.Nickname
         session.Values["role"] = user.Role
         session.Save(r, w)
+
+        h.DB.UnlockAchievement(user.ID, "newcomer")
 
         w.Header().Set("HX-Redirect", "/")
         w.WriteHeader(http.StatusOK)
@@ -237,6 +240,8 @@ func (h *Handler) SubmitProject(w http.ResponseWriter, r *http.Request) {
                 project.Images = imagePaths
         }
 
+        h.DB.CheckAndUnlockAchievements(userID.(int))
+
         w.Header().Set("HX-Redirect", "/projects")
         w.WriteHeader(http.StatusOK)
 }
@@ -332,6 +337,8 @@ func (h *Handler) VoteSubmit(w http.ResponseWriter, r *http.Request) {
                 w.Write([]byte(`<div class="text-red-600 text-sm">Ошибка при сохранении голоса</div>`))
                 return
         }
+
+        h.DB.CheckAndUnlockAchievements(userID.(int))
 
         w.Header().Set("HX-Redirect", fmt.Sprintf("/projects/%d", projectID))
         w.WriteHeader(http.StatusOK)
@@ -460,7 +467,15 @@ func (h *Handler) AdminUpdateProjectStatus(w http.ResponseWriter, r *http.Reques
         newStatus := r.FormValue("status")
         comment := r.FormValue("comment")
 
-        err := h.DB.UpdateProjectStatus(projectID, newStatus, adminID, comment)
+        project, err := h.DB.GetProjectByID(projectID)
+        if err != nil {
+                w.Header().Set("HX-Retarget", "#error")
+                w.Header().Set("HX-Reswap", "innerHTML")
+                w.Write([]byte(`<div class="text-red-600 text-sm">Проект не найден</div>`))
+                return
+        }
+
+        err = h.DB.UpdateProjectStatus(projectID, newStatus, adminID, comment)
         if err != nil {
                 w.Header().Set("HX-Retarget", "#error")
                 w.Header().Set("HX-Reswap", "innerHTML")
@@ -475,6 +490,8 @@ func (h *Handler) AdminUpdateProjectStatus(w http.ResponseWriter, r *http.Reques
                         h.DB.SetVotingPeriod(projectID, voteStart, voteEnd)
                 }
         }
+
+        h.DB.CheckAndUnlockAchievements(project.UserID)
 
         w.Header().Set("HX-Redirect", "/admin")
         w.WriteHeader(http.StatusOK)
@@ -506,6 +523,8 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
                 w.Write([]byte(`<div class="text-red-600 text-sm">Ошибка добавления комментария</div>`))
                 return
         }
+
+        h.DB.CheckAndUnlockAchievements(userID.(int))
 
         w.Header().Set("HX-Refresh", "true")
         w.WriteHeader(http.StatusOK)
@@ -596,6 +615,30 @@ func (h *Handler) ProfilePage(w http.ResponseWriter, r *http.Request) {
                 }
         }
 
+        stats, err := h.DB.GetUserStats(uid)
+        if err != nil {
+                stats = &models.UserStats{}
+        }
+
+        userAchievements, err := h.DB.GetUserAchievements(uid)
+        if err != nil {
+                userAchievements = []models.UserAchievement{}
+        }
+
+        allAchievements := achievements.GetAllAchievementsList()
+        unlockedMap := make(map[string]bool)
+        for _, ua := range userAchievements {
+                unlockedMap[ua.AchievementID] = true
+        }
+
+        achievementsWithStatus := []map[string]interface{}{}
+        for _, ach := range allAchievements {
+                achievementsWithStatus = append(achievementsWithStatus, map[string]interface{}{
+                        "Achievement": ach,
+                        "Unlocked":    unlockedMap[ach.ID],
+                })
+        }
+
         data := map[string]interface{}{
                 "LoggedIn":     true,
                 "IsAdmin":      userRole == "admin",
@@ -605,6 +648,8 @@ func (h *Handler) ProfilePage(w http.ResponseWriter, r *http.Request) {
                 "UserID":       userID,
                 "ProjectCount": len(userProjects),
                 "Projects":     userProjects,
+                "Stats":        stats,
+                "Achievements": achievementsWithStatus,
         }
 
         h.Templates.ExecuteTemplate(w, "profile.html", data)
