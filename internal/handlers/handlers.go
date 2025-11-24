@@ -35,9 +35,11 @@ func New(database *db.Database, store *sessions.CookieStore) *Handler {
 func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
         session, _ := h.Store.Get(r, "session")
         userID := session.Values["user_id"]
+        userRole := session.Values["role"]
 
         data := map[string]interface{}{
                 "LoggedIn": userID != nil,
+                "IsAdmin":  userRole == "admin",
         }
 
         h.Templates.ExecuteTemplate(w, "index.html", data)
@@ -85,6 +87,7 @@ func (h *Handler) RegisterSubmit(w http.ResponseWriter, r *http.Request) {
         session, _ := h.Store.Get(r, "session")
         session.Values["user_id"] = user.ID
         session.Values["email"] = user.Email
+        session.Values["role"] = user.Role
         session.Save(r, w)
 
         w.Header().Set("HX-Redirect", "/")
@@ -117,9 +120,14 @@ func (h *Handler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
         session, _ := h.Store.Get(r, "session")
         session.Values["user_id"] = user.ID
         session.Values["email"] = user.Email
+        session.Values["role"] = user.Role
         session.Save(r, w)
 
-        w.Header().Set("HX-Redirect", "/")
+        if user.Role == "admin" {
+                w.Header().Set("HX-Redirect", "/admin")
+        } else {
+                w.Header().Set("HX-Redirect", "/")
+        }
         w.WriteHeader(http.StatusOK)
 }
 
@@ -133,9 +141,11 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) SubmitPage(w http.ResponseWriter, r *http.Request) {
         session, _ := h.Store.Get(r, "session")
         userID := session.Values["user_id"]
+        userRole := session.Values["role"]
 
         data := map[string]interface{}{
                 "LoggedIn": userID != nil,
+                "IsAdmin":  userRole == "admin",
         }
 
         h.Templates.ExecuteTemplate(w, "submit.html", data)
@@ -189,7 +199,7 @@ func (h *Handler) SubmitProject(w http.ResponseWriter, r *http.Request) {
                 Budget:      budget,
                 Lat:         lat,
                 Lng:         lng,
-                Status:      "voting",
+                Status:      "moderation",
                 UserID:      userID.(int),
                 Images:      []string{},
         }
@@ -221,6 +231,7 @@ func (h *Handler) SubmitProject(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ProjectsPage(w http.ResponseWriter, r *http.Request) {
         session, _ := h.Store.Get(r, "session")
         userID := session.Values["user_id"]
+        userRole := session.Values["role"]
 
         projects, err := h.DB.GetAllProjects()
         if err != nil {
@@ -229,6 +240,7 @@ func (h *Handler) ProjectsPage(w http.ResponseWriter, r *http.Request) {
 
         data := map[string]interface{}{
                 "LoggedIn": userID != nil,
+                "IsAdmin":  userRole == "admin",
                 "Projects": projects,
         }
 
@@ -238,6 +250,7 @@ func (h *Handler) ProjectsPage(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ProjectDetail(w http.ResponseWriter, r *http.Request) {
         session, _ := h.Store.Get(r, "session")
         userID := session.Values["user_id"]
+        userRole := session.Values["role"]
 
         projectIDStr := chi.URLParam(r, "id")
         projectID, _ := strconv.Atoi(projectIDStr)
@@ -249,6 +262,8 @@ func (h *Handler) ProjectDetail(w http.ResponseWriter, r *http.Request) {
         }
 
         votes, _ := h.DB.GetProjectVotes(projectID)
+        comments, _ := h.DB.GetProjectComments(projectID)
+        history, _ := h.DB.GetProjectStatusHistory(projectID)
 
         hasVoted := false
         if userID != nil {
@@ -257,8 +272,11 @@ func (h *Handler) ProjectDetail(w http.ResponseWriter, r *http.Request) {
 
         data := map[string]interface{}{
                 "LoggedIn": userID != nil,
+                "IsAdmin":  userRole == "admin",
                 "Project":  project,
                 "Votes":    votes,
+                "Comments": comments,
+                "History":  history,
                 "HasVoted": hasVoted,
         }
 
@@ -309,9 +327,11 @@ func (h *Handler) VoteSubmit(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) MapPage(w http.ResponseWriter, r *http.Request) {
         session, _ := h.Store.Get(r, "session")
         userID := session.Values["user_id"]
+        userRole := session.Values["role"]
 
         data := map[string]interface{}{
                 "LoggedIn": userID != nil,
+                "IsAdmin":  userRole == "admin",
         }
 
         h.Templates.ExecuteTemplate(w, "map.html", data)
@@ -392,4 +412,88 @@ func reverse(s string) string {
                 runes[i], runes[j] = runes[j], runes[i]
         }
         return string(runes)
+}
+
+func (h *Handler) AdminDashboard(w http.ResponseWriter, r *http.Request) {
+        session, _ := h.Store.Get(r, "session")
+        userID := session.Values["user_id"]
+        userRole := session.Values["role"]
+
+        moderationProjects, _ := h.DB.GetProjectsByStatus("moderation")
+        votingProjects, _ := h.DB.GetProjectsByStatus("voting")
+        selectedProjects, _ := h.DB.GetProjectsByStatus("selected")
+        inProgressProjects, _ := h.DB.GetProjectsByStatus("in_progress")
+        doneProjects, _ := h.DB.GetProjectsByStatus("done")
+
+        data := map[string]interface{}{
+                "LoggedIn":           userID != nil,
+                "IsAdmin":            userRole == "admin",
+                "ModerationProjects": moderationProjects,
+                "VotingProjects":     votingProjects,
+                "SelectedProjects":   selectedProjects,
+                "InProgressProjects": inProgressProjects,
+                "DoneProjects":       doneProjects,
+        }
+
+        h.Templates.ExecuteTemplate(w, "admin.html", data)
+}
+
+func (h *Handler) AdminUpdateProjectStatus(w http.ResponseWriter, r *http.Request) {
+        session, _ := h.Store.Get(r, "session")
+        adminID := session.Values["user_id"].(int)
+
+        projectIDStr := r.FormValue("project_id")
+        projectID, _ := strconv.Atoi(projectIDStr)
+        newStatus := r.FormValue("status")
+        comment := r.FormValue("comment")
+
+        err := h.DB.UpdateProjectStatus(projectID, newStatus, adminID, comment)
+        if err != nil {
+                w.Header().Set("HX-Retarget", "#error")
+                w.Header().Set("HX-Reswap", "innerHTML")
+                w.Write([]byte(`<div class="text-red-600 text-sm">Ошибка обновления статуса</div>`))
+                return
+        }
+
+        if newStatus == "voting" {
+                voteStart := r.FormValue("vote_start")
+                voteEnd := r.FormValue("vote_end")
+                if voteStart != "" && voteEnd != "" {
+                        h.DB.SetVotingPeriod(projectID, voteStart, voteEnd)
+                }
+        }
+
+        w.Header().Set("HX-Redirect", "/admin")
+        w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
+        session, _ := h.Store.Get(r, "session")
+        userID := session.Values["user_id"]
+        if userID == nil {
+                http.Error(w, "Unauthorized", http.StatusUnauthorized)
+                return
+        }
+
+        projectIDStr := r.FormValue("project_id")
+        projectID, _ := strconv.Atoi(projectIDStr)
+        content := r.FormValue("content")
+
+        if len(content) < 50 {
+                w.Header().Set("HX-Retarget", "#comment-error")
+                w.Header().Set("HX-Reswap", "innerHTML")
+                w.Write([]byte(`<div class="text-red-600 text-sm">Комментарий должен быть минимум 50 символов</div>`))
+                return
+        }
+
+        err := h.DB.CreateComment(projectID, userID.(int), content)
+        if err != nil {
+                w.Header().Set("HX-Retarget", "#comment-error")
+                w.Header().Set("HX-Reswap", "innerHTML")
+                w.Write([]byte(`<div class="text-red-600 text-sm">Ошибка добавления комментария</div>`))
+                return
+        }
+
+        w.Header().Set("HX-Refresh", "true")
+        w.WriteHeader(http.StatusOK)
 }

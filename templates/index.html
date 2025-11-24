@@ -57,7 +57,11 @@
                 <a href="/projects" class="text-gray-700 hover:text-blue-600">Проекты</a>
                 <a href="/map" class="text-gray-700 hover:text-blue-600">Карта</a>
                 {{if .LoggedIn}}
+                {{if .IsAdmin}}
+                <a href="/admin" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Админ-панель</a>
+                {{else}}
                 <a href="/submit" class="text-gray-700 hover:text-blue-600">Подать идею</a>
+                {{end}}
                 <a href="/logout" class="text-gray-700 hover:text-blue-600">Выйти</a>
                 {{else}}
                 <a href="/login" class="text-gray-700 hover:text-blue-600">Войти</a>
