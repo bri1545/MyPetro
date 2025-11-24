@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Карта проектов - Мой Петропавловск</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body class="bg-gray-50">
+    {{template "header" .}}
+    
+    <main class="container mx-auto px-4 py-8">
+        <h2 class="text-3xl font-bold mb-6">Карта проектов</h2>
+        
+        <div class="bg-white rounded-lg shadow-lg p-4">
+            <div class="flex gap-4 mb-4 text-sm">
+                <div class="flex items-center gap-2">
+                    <span class="w-4 h-4 bg-gray-400 rounded-full"></span>
+                    <span>Голосование</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-4 h-4 bg-orange-400 rounded-full"></span>
+                    <span>В работе</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-4 h-4 bg-green-400 rounded-full"></span>
+                    <span>Завершён</span>
+                </div>
+            </div>
+            
+            <div id="map" class="h-[600px] rounded-lg"></div>
+        </div>
+    </main>
+    
+    <script>
+        const map = L.map('map').setView([54.8667, 69.15], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+        }).addTo(map);
+        
+        const statusColors = {
+            'voting': '#9CA3AF',
+            'in_progress': '#FB923C',
+            'done': '#4ADE80'
+        };
+        
+        fetch('/api/map/data')
+            .then(response => response.json())
+            .then(projects => {
+                if (projects && projects.length > 0) {
+                    projects.forEach(project => {
+                        const color = statusColors[project.status] || '#9CA3AF';
+                        
+                        const icon = L.divIcon({
+                            className: 'custom-marker',
+                            html: `<div style="background-color: ${color}; width: 30px; height: 30px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>`,
+                            iconSize: [30, 30],
+                            iconAnchor: [15, 15]
+                        });
+                        
+                        const marker = L.marker([project.lat, project.lng], { icon }).addTo(map);
+                        
+                        marker.on('click', function() {
+                            fetch(`/api/map/popup/${project.id}`)
+                                .then(response => response.text())
+                                .then(html => {
+                                    marker.bindPopup(html).openPopup();
+                                });
+                        });
+                    });
+                } else {
+                    const popup = L.popup()
+                        .setLatLng([54.8667, 69.15])
+                        .setContent('<div class="p-4"><h3 class="font-bold mb-2">Пока нет проектов</h3><p>Будьте первым, кто предложит идею!</p></div>')
+                        .openOn(map);
+                }
+            });
+    </script>
+</body>
+</html>
